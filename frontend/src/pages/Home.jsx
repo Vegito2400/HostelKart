@@ -11,7 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     const unsub = subscribe(() => setListings(getListings()));
-    fetchListings().then(setListings).catch(console.error);
+    fetchListings({ includeInactive: "true" }).then(setListings).catch(console.error);
     return unsub;
   }, []);
 

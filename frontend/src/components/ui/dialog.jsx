@@ -1,10 +1,22 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 
 const DialogContext = createContext(null);
 
-export const Dialog = ({ open, onOpenChange, children }) => (
-  <DialogContext.Provider value={{ open, onOpenChange }}>{children}</DialogContext.Provider>
-);
+export const Dialog = ({ open, onOpenChange, children }) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = open !== undefined;
+
+  const setOpen = (nextOpen) => {
+    if (!isControlled) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
+
+  return (
+    <DialogContext.Provider value={{ open: isControlled ? open : internalOpen, onOpenChange: setOpen }}>
+      {children}
+    </DialogContext.Provider>
+  );
+};
 
 export const DialogTrigger = ({ asChild = false, children }) => {
   const { onOpenChange } = useContext(DialogContext);
@@ -13,11 +25,11 @@ export const DialogTrigger = ({ asChild = false, children }) => {
     return (
       <Comp {...children.props} onClick={(e) => {
         children.props.onClick?.(e);
-        onOpenChange(true);
+        onOpenChange?.(true);
       }} />
     );
   }
-  return <button type="button" onClick={() => onOpenChange(true)}>{children}</button>;
+  return <button type="button" onClick={() => onOpenChange?.(true)}>{children}</button>;
 };
 
 export const DialogContent = ({ className = "", children, ...props }) => {

@@ -8,6 +8,7 @@ const KEYS = {
   users: "hk_users",
   listings: "hk_listings",
   messages: "hk_messages",
+  offers: "hk_offers",
   reports: "hk_reports",
   session: "hk_session",
   token: "hk_token",
@@ -119,6 +120,50 @@ const normalizeListing = (listing) => {
     condition: listing.condition || "Good",
     createdAt: listing.createdAt ? new Date(listing.createdAt).getTime() : Date.now(),
     updatedAt: listing.updatedAt ? new Date(listing.updatedAt).getTime() : undefined,
+  };
+};
+
+const normalizeOffer = (offer) => {
+  if (!offer) return null;
+  const listing = typeof offer.listingId === "object" ? normalizeListing(offer.listingId) : null;
+  const buyer = typeof offer.buyerId === "object" ? rememberUser(offer.buyerId) : null;
+  const seller = typeof offer.sellerId === "object" ? rememberUser(offer.sellerId) : null;
+
+  if (listing) {
+    const listings = getListings().filter((l) => l.id !== listing.id);
+    write(KEYS.listings, [listing, ...listings]);
+  }
+
+  return {
+    ...offer,
+    id: offer.id || offer._id,
+    listingId: listing?.id || offer.listingId,
+    buyerId: buyer?.id || offer.buyerId,
+    sellerId: seller?.id || offer.sellerId,
+    createdAt: offer.createdAt ? new Date(offer.createdAt).getTime() : Date.now(),
+    updatedAt: offer.updatedAt ? new Date(offer.updatedAt).getTime() : undefined,
+  };
+};
+
+const normalizeReport = (report) => {
+  if (!report) return null;
+  const listing = typeof report.listingId === "object" ? normalizeListing(report.listingId) : null;
+  const reporter = typeof report.reporterId === "object" ? rememberUser(report.reporterId) : null;
+
+  if (listing) {
+    const listings = getListings().filter((l) => l.id !== listing.id);
+    write(KEYS.listings, [listing, ...listings]);
+  }
+
+  return {
+    ...report,
+    id: report.id || report._id,
+    listingId: listing?.id || report.listingId,
+    reporterId: reporter?.id || report.reporterId,
+    details: report.description || report.details || "",
+    status: report.status || "pending",
+    createdAt: report.createdAt ? new Date(report.createdAt).getTime() : Date.now(),
+    updatedAt: report.updatedAt ? new Date(report.updatedAt).getTime() : undefined,
   };
 };
 
@@ -312,6 +357,33 @@ export const deleteListing = async (id) => {
   write(KEYS.messages, getMessages().filter((m) => m.listingId !== id));
 };
 
+// -------------------- Offers --------------------
+export const getOffers = () => read(KEYS.offers, []);
+
+export const fetchOffers = async () => {
+  const offers = (await request("/offers")).map(normalizeOffer).filter(Boolean);
+  write(KEYS.offers, offers);
+  return offers;
+};
+
+export const createOffer = async ({ listingId, offeredPrice }) => {
+  const offer = normalizeOffer(await request("/offers", {
+    method: "POST",
+    body: JSON.stringify({ listingId, offeredPrice }),
+  }));
+  write(KEYS.offers, [offer, ...getOffers().filter((o) => o.id !== offer.id)]);
+  return offer;
+};
+
+export const respondToOffer = async (id, action) => {
+  const offer = normalizeOffer(await request(`/offers/${id}/respond`, {
+    method: "PATCH",
+    body: JSON.stringify({ action }),
+  }));
+  write(KEYS.offers, getOffers().map((o) => (o.id === offer.id ? offer : o)));
+  return offer;
+};
+
 // -------------------- Messages --------------------
 // A conversation is keyed by (listingId, buyerId, sellerId).
 export const getMessages = () => read(KEYS.messages, []);
@@ -430,27 +502,32 @@ export const sendMessage = async ({ listingId, buyerId, sellerId, senderId, text
 // -------------------- Reports --------------------
 export const getReports = () => read(KEYS.reports, []);
 
-export const createReport = ({ listingId, reporterId, reason, details }) => {
-  const report = {
-    id: uid("r"),
-    listingId,
-    reporterId,
-    reason,
-    details: details || "",
-    status: "open",
-    createdAt: Date.now(),
-  };
-  const reports = getReports();
-  reports.unshift(report);
+export const fetchReports = async () => {
+  const reports = (await request("/reports")).map(normalizeReport).filter(Boolean);
   write(KEYS.reports, reports);
+  return reports;
+};
+
+export const createReport = async ({ listingId, reason, description, details }) => {
+  const report = normalizeReport(await request("/reports", {
+    method: "POST",
+    body: JSON.stringify({ listingId, reason, description: description ?? details ?? "" }),
+  }));
+  write(KEYS.reports, [report, ...getReports().filter((r) => r.id !== report.id)]);
+  return report;
+};
+
+export const updateReportStatus = async (id, status) => {
+  const report = normalizeReport(await request(`/reports/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  }));
+  write(KEYS.reports, getReports().map((r) => (r.id === report.id ? report : r)));
   return report;
 };
 
 export const dismissReport = (id) => {
-  const reports = getReports().map((r) =>
-    r.id === id ? { ...r, status: "dismissed" } : r,
-  );
-  write(KEYS.reports, reports);
+  return updateReportStatus(id, "reviewed");
 };
 
 // -------------------- Subscribe helper --------------------

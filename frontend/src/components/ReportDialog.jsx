@@ -19,9 +19,10 @@ import { useAuth } from "../context/AuthContext";
 
 const REASONS = [
   { value: "inappropriate", label: "Inappropriate or offensive content" },
-  { value: "scam", label: "Scam or fraudulent listing" },
-  { value: "wrong_category", label: "Wrong category / spam" },
-  { value: "prohibited", label: "Prohibited item" },
+  { value: "fraud", label: "Scam or fraudulent listing" },
+  { value: "spam", label: "Spam or misleading listing" },
+  { value: "duplicate", label: "Duplicate listing" },
+  { value: "other", label: "Other issue" },
 ];
 
 export const ReportDialog = ({ listingId }) => {
@@ -29,17 +30,25 @@ export const ReportDialog = ({ listingId }) => {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("inappropriate");
   const [details, setDetails] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     if (!user) {
       toast.error("Please log in to report a listing.");
       return;
     }
-    createReport({ listingId, reporterId: user.id, reason, details });
-    toast.success("Report submitted. Our admins will review it shortly.");
-    setOpen(false);
-    setDetails("");
-    setReason("inappropriate");
+    setLoading(true);
+    try {
+      await createReport({ listingId, reason, description: details.trim() });
+      toast.success("Report submitted. Our admins will review it shortly.");
+      setOpen(false);
+      setDetails("");
+      setReason("inappropriate");
+    } catch (err) {
+      toast.error(err.message || "Could not submit report.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -99,9 +108,10 @@ export const ReportDialog = ({ listingId }) => {
           <Button
             data-testid="report-submit-btn"
             onClick={submit}
+            disabled={loading}
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >
-            Submit report
+            {loading ? "Submitting..." : "Submit report"}
           </Button>
         </DialogFooter>
       </DialogContent>

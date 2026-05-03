@@ -45,7 +45,7 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    await listingService.deleteListing(req.params.id, req.user._id);
+    await listingService.deleteListing(req.params.id, req.user);
     res.json({ message: "Listing deleted" });
   } catch (err) {
     next(err);

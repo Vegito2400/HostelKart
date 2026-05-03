@@ -28,16 +28,19 @@ import {
   Trash2,
   CheckCircle2,
   RotateCcw,
-  MessageSquare,
+  HandCoins,
+  XCircle,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
   deleteListing,
+  fetchOffers,
   fetchListings,
-  getConversationsForUser,
+  getOffers,
   getListingById,
   getListingsBySeller,
   getUserById,
+  respondToOffer,
   subscribe,
   updateListing,
 } from "../lib/store";
@@ -50,11 +53,12 @@ export default function Dashboard() {
   useEffect(() => {
     const unsub = subscribe(() => setTick((t) => t + 1));
     fetchListings({ sellerId: user.id }).catch(console.error);
+    fetchOffers().catch(console.error);
     return unsub;
   }, [user.id]);
 
   const myListings = useMemo(() => getListingsBySeller(user.id), [user.id, setTick]); // eslint-disable-line
-  const myConvos = useMemo(() => getConversationsForUser(user.id), [user.id, setTick]); // eslint-disable-line
+  const offers = useMemo(() => getOffers().filter((o) => o.sellerId === user.id), [user.id, setTick]); // eslint-disable-line
 
   const refresh = () => setTick((t) => t + 1);
 
@@ -65,9 +69,25 @@ export default function Dashboard() {
   };
 
   const onDelete = async (id) => {
-    await deleteListing(id);
-    toast.success("Listing deleted.");
-    refresh();
+    try {
+      await deleteListing(id);
+      toast.success("Listing deleted.");
+      refresh();
+    } catch (err) {
+      toast.error(err.message || "Could not delete listing.");
+    }
+  };
+
+  const onRespondToOffer = async (id, action) => {
+    try {
+      await respondToOffer(id, action);
+      toast.success(action === "accept" ? "Offer accepted." : "Offer rejected.");
+      await fetchOffers();
+      await fetchListings({ sellerId: user.id });
+      refresh();
+    } catch (err) {
+      toast.error(err.message || "Could not update offer.");
+    }
   };
 
   return (
@@ -82,7 +102,7 @@ export default function Dashboard() {
               Hi, {user.name.split(" ")[0]}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Manage your listings and conversations in one place.
+              Manage your listings and buyer offers in one place.
             </p>
           </div>
           <Button
@@ -99,8 +119,8 @@ export default function Dashboard() {
             <TabsTrigger data-testid="dashboard-tab-listings" value="listings">
               My listings ({myListings.length})
             </TabsTrigger>
-            <TabsTrigger data-testid="dashboard-tab-messages" value="messages">
-              Messages ({myConvos.length})
+            <TabsTrigger data-testid="dashboard-tab-offers" value="offers">
+              Offers ({offers.length})
             </TabsTrigger>
           </TabsList>
 
@@ -181,7 +201,7 @@ export default function Dashboard() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete this listing?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This will also remove related messages and reports. This cannot be undone.
+                                This will also remove related reports. This cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -204,30 +224,28 @@ export default function Dashboard() {
             )}
           </TabsContent>
 
-          <TabsContent value="messages" className="mt-6">
-            {myConvos.length === 0 ? (
+          <TabsContent value="offers" className="mt-6">
+            {offers.length === 0 ? (
               <div className="border border-dashed border-gray-300 rounded-lg py-16 text-center">
-                <MessageSquare className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                <HandCoins className="h-10 w-10 text-gray-400 mx-auto mb-3" />
                 <h3 className="font-heading text-lg font-semibold text-gray-900">
-                  No conversations yet
+                  No offers yet
                 </h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Start a chat from any listing to negotiate and arrange a meetup.
+                  Offers from interested buyers will appear here.
                 </p>
               </div>
             ) : (
-              <div data-testid="dashboard-conversations-list" className="space-y-2">
-                {myConvos.map((c) => {
-                  const listing = getListingById(c.listingId);
-                  const otherId = c.buyerId === user.id ? c.sellerId : c.buyerId;
-                  const other = getUserById(otherId);
+              <div data-testid="dashboard-offers-list" className="space-y-2">
+                {offers.map((offer) => {
+                  const listing = getListingById(offer.listingId);
+                  const buyer = getUserById(offer.buyerId);
                   if (!listing) return null;
                   return (
-                    <Link
-                      key={c.key}
-                      to={`/listing/${listing.id}?chatWith=${otherId}`}
-                      data-testid={`convo-row-${c.key}`}
-                      className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all"
+                    <div
+                      key={offer.id}
+                      data-testid={`offer-row-${offer.id}`}
+                      className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg"
                     >
                       {listing.images?.[0] && (
                         <img
@@ -239,20 +257,53 @@ export default function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="font-heading font-semibold text-gray-900 truncate">
-                            {other?.name || "User"}
+                            {buyer?.name || "Buyer"}
                           </h4>
-                          <span className="text-xs text-gray-400 shrink-0">
-                            {new Date(c.lastAt).toLocaleDateString()}
-                          </span>
+                          <Badge
+                            className={
+                              offer.status === "accepted"
+                                ? "bg-green-50 text-green-700 border-0 hover:bg-green-50"
+                                : offer.status === "rejected"
+                                  ? "bg-gray-100 text-gray-600 border-0 hover:bg-gray-100"
+                                  : "bg-orange-50 text-orange-700 border-0 hover:bg-orange-50"
+                            }
+                          >
+                            {offer.status}
+                          </Badge>
                         </div>
+                        <p className="text-xs text-gray-500 truncate">
+                          {buyer?.email || "No email available"}
+                        </p>
                         <p className="text-xs text-gray-500 truncate">
                           {listing.title}
                         </p>
-                        <p className="text-sm text-gray-700 truncate mt-0.5">
-                          {c.lastMessage}
+                        <p className="text-sm text-gray-700 mt-0.5">
+                          Offered <span className="font-semibold text-orange-600">Rs. {Number(offer.offeredPrice).toLocaleString()}</span>
+                          {" "}on {new Date(offer.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                    </Link>
+                      {offer.status === "pending" && (
+                        <div className="flex gap-2 shrink-0">
+                          <Button
+                            data-testid={`accept-offer-${offer.id}`}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => onRespondToOffer(offer.id, "accept")}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Accept
+                          </Button>
+                          <Button
+                            data-testid={`reject-offer-${offer.id}`}
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => onRespondToOffer(offer.id, "reject")}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
