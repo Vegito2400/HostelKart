@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { toast } from "sonner";
 import { Layout } from "../components/Layout";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
 import { ArrowLeft, MapPin, Tag } from "lucide-react";
 import { ReportDialog } from "../components/ReportDialog";
-import { ChatDrawer } from "../components/ChatDrawer";
-import { fetchListingById, getListingById, getUserById, subscribe } from "../lib/store";
+import { createOffer, fetchListingById, getListingById, getUserById, subscribe } from "../lib/store";
 import { useAuth } from "../context/AuthContext";
 
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
   const { user } = useAuth();
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [offerPrice, setOfferPrice] = useState("");
+  const [offerLoading, setOfferLoading] = useState(false);
 
   useEffect(() => {
     const unsub = subscribe(() => setTick((t) => t + 1));
@@ -55,12 +57,27 @@ export default function ListingDetail() {
 
   const seller = getUserById(listing.sellerId);
   const isOwner = user?.id === listing.sellerId;
+  const canOffer = user && !isOwner && listing.status === "active";
 
-  // chatWith query lets sellers reply to a specific buyer via the dashboard.
-  const chatPartnerId = params.get("chatWith");
-  const buyerId = isOwner ? chatPartnerId : user?.id;
-  const sellerId = listing.sellerId;
-  const canChat = user && buyerId && buyerId !== sellerId;
+  const submitOffer = async (e) => {
+    e.preventDefault();
+    const offeredPrice = Number(offerPrice);
+    if (!Number.isFinite(offeredPrice) || offeredPrice <= 0) {
+      toast.error("Enter a valid offer price.");
+      return;
+    }
+
+    setOfferLoading(true);
+    try {
+      await createOffer({ listingId: listing.id, offeredPrice });
+      toast.success("Offer sent to the seller.");
+      setOfferPrice("");
+    } catch (err) {
+      toast.error(err.message || "Could not send offer.");
+    } finally {
+      setOfferLoading(false);
+    }
+  };
 
   return (
     <Layout>
@@ -109,6 +126,9 @@ export default function ListingDetail() {
                 {listing.status === "sold" && (
                   <Badge className="bg-gray-900 text-white hover:bg-gray-900">Sold</Badge>
                 )}
+                {listing.status === "reserved" && (
+                  <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 border-0">Reserved</Badge>
+                )}
               </div>
               <h1 data-testid="listing-title" className="font-heading text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
                 {listing.title}
@@ -145,16 +165,35 @@ export default function ListingDetail() {
                       Manage from dashboard
                     </Button>
                   </Link>
-                ) : canChat ? (
-                    // <></>
-                  <ChatDrawer listing={listing} buyerId={buyerId} sellerId={sellerId} />
+                ) : canOffer ? (
+                  <form onSubmit={submitOffer} className="rounded-lg border border-gray-200 bg-white p-3 space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        data-testid="offer-price-input"
+                        type="number"
+                        min={1}
+                        value={offerPrice}
+                        onChange={(e) => setOfferPrice(e.target.value)}
+                        placeholder="Your offer price"
+                        className="focus-visible:ring-orange-500"
+                      />
+                      <Button
+                        data-testid="send-offer-btn"
+                        type="submit"
+                        disabled={offerLoading}
+                        className="bg-orange-500 hover:bg-orange-600 text-white shrink-0"
+                      >
+                        {offerLoading ? "Sending..." : "Send offer"}
+                      </Button>
+                    </div>
+                  </form>
                 ) : !user ? (
                   <Button
-                    data-testid="listing-login-to-chat"
+                    data-testid="listing-login-to-offer"
                     onClick={() => navigate("/login")}
                     className="bg-orange-500 hover:bg-orange-600 text-white"
                   >
-                    Log in to chat
+                    Log in to send offer
                   </Button>
                 ) : null}
 

@@ -40,7 +40,7 @@ export default function Login() {
               Welcome back
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Log in to browse listings and chat with campus sellers.
+              Log in to browse listings and send offers to campus sellers.
             </p>
           </div>
 

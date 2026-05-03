@@ -9,5 +9,9 @@ export {
 } from "./dialog";
 import { Button } from "./button";
 
-export const AlertDialogCancel = (props) => <Button variant="outline" {...props} />;
-export const AlertDialogAction = (props) => <Button {...props} />;
+export const AlertDialogCancel = (props) => (
+  <Button variant="outline" type="button" {...props} />
+);
+export const AlertDialogAction = (props) => (
+  <Button type="button" {...props} />
+);

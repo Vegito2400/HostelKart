@@ -15,9 +15,16 @@ const timeAgo = (ts) => {
   return `${days}d ago`;
 };
 
+const statusStyles = {
+  active: "bg-green-50 text-green-700 hover:bg-green-50 border-0",
+  reserved: "bg-blue-50 text-blue-700 hover:bg-blue-50 border-0",
+  sold: "bg-gray-900 text-white hover:bg-gray-900 border-0",
+};
+
 export const ListingCard = ({ listing, testIdPrefix = "listing-card" }) => {
   const seller = getUserById(listing.sellerId);
   const cover = listing.images?.[0];
+  const status = listing.status || "active";
 
   return (
     <Link to={`/listing/${listing.id}`} data-testid={`${testIdPrefix}-${listing.id}`}>
@@ -41,9 +48,12 @@ export const ListingCard = ({ listing, testIdPrefix = "listing-card" }) => {
             <Badge variant="secondary" className="bg-orange-50 text-orange-700 hover:bg-orange-50 border-0 text-[11px]">
               {listing.category}
             </Badge>
-            {listing.status === "sold" && (
-              <Badge className="bg-gray-900 text-white hover:bg-gray-900 text-[11px]">Sold</Badge>
-            )}
+            <Badge
+              data-testid={`${testIdPrefix}-status-${listing.id}`}
+              className={`${statusStyles[status] || statusStyles.active} text-[11px] capitalize`}
+            >
+              {status}
+            </Badge>
           </div>
           <h3 className="font-heading text-[15px] font-semibold text-gray-900 line-clamp-2 leading-snug">
             {listing.title}

@@ -16,35 +16,52 @@ import { ShieldCheck, Trash2, X } from "lucide-react";
 import {
   deleteListing,
   dismissReport,
+  fetchReports,
   getListingById,
   getReports,
   getUserById,
   subscribe,
+  updateReportStatus,
 } from "../lib/store";
 
 const REASON_LABEL = {
   inappropriate: "Inappropriate",
-  scam: "Scam",
-  wrong_category: "Wrong category",
-  prohibited: "Prohibited",
+  fraud: "Fraud",
+  spam: "Spam",
+  duplicate: "Duplicate",
+  other: "Other",
 };
 
 export default function Admin() {
   const [, setTick] = useState(0);
-  useEffect(() => subscribe(() => setTick((t) => t + 1)), []);
+  useEffect(() => {
+    const unsub = subscribe(() => setTick((t) => t + 1));
+    fetchReports().catch(console.error);
+    return unsub;
+  }, []);
 
   const reports = useMemo(() => getReports(), [setTick]); // eslint-disable-line
-  const open = reports.filter((r) => r.status === "open");
-  const resolved = reports.filter((r) => r.status !== "open");
+  const open = reports.filter((r) => r.status === "pending");
+  const resolved = reports.filter((r) => r.status !== "pending");
 
-  const onDelete = (listingId) => {
-    deleteListing(listingId);
-    toast.success("Listing deleted. Related reports cleared.");
+  const onDelete = async (reportId, listingId) => {
+    try {
+      await deleteListing(listingId);
+      await updateReportStatus(reportId, "resolved");
+      await fetchReports();
+      toast.success("Listing removed and report resolved.");
+    } catch (err) {
+      toast.error(err.message || "Could not remove listing.");
+    }
   };
 
-  const onDismiss = (id) => {
-    dismissReport(id);
-    toast.success("Report dismissed.");
+  const onDismiss = async (id) => {
+    try {
+      await dismissReport(id);
+      toast.success("Report rejected.");
+    } catch (err) {
+      toast.error(err.message || "Could not reject report.");
+    }
   };
 
   return (
@@ -122,7 +139,7 @@ export default function Admin() {
                                 data-testid={`admin-delete-listing-${r.id}`}
                                 size="sm"
                                 className="bg-red-600 hover:bg-red-700 text-white"
-                                onClick={() => onDelete(listing.id)}
+                                onClick={() => onDelete(r.id, listing.id)}
                               >
                                 <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete listing
                               </Button>
@@ -133,7 +150,7 @@ export default function Admin() {
                               variant="outline"
                               onClick={() => onDismiss(r.id)}
                             >
-                              <X className="h-3.5 w-3.5 mr-1" /> Dismiss
+                              <X className="h-3.5 w-3.5 mr-1" /> Reject report
                             </Button>
                           </div>
                         </TableCell>

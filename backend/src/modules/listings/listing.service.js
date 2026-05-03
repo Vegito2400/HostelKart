@@ -35,9 +35,10 @@ const getListings = async (query) => {
   }
 
   console.log("Cache MISS");
-  const { page = 1, limit = 50, category, minPrice, maxPrice, search, sellerId } = query;
+  const { page = 1, limit = 50, category, minPrice, maxPrice, search, sellerId, includeInactive } = query;
 
-  const filter = sellerId ? { sellerId } : { status: "active" };
+  const filter = sellerId || includeInactive === "true" ? {} : { status: "active" };
+  if (sellerId) filter.sellerId = sellerId;
 
   if (category) filter.category = category;
 
@@ -89,13 +90,13 @@ const updateListing = async (id, userId, data) => {
   return await listing.save();
 };
 
-const deleteListing = async (id, userId) => {
+const deleteListing = async (id, user) => {
     await clearListingsCache();
     const listing = await Listing.findById(id);
 
   if (!listing) throw new Error("Listing not found");
 
-  if (listing.sellerId.toString() !== userId.toString()) {
+  if (listing.sellerId.toString() !== user._id.toString() && user.role !== "admin") {
     throw new Error("Not authorized");
   }
 
@@ -108,4 +109,5 @@ module.exports = {
   getListingById,
   updateListing,
   deleteListing,
+  clearListingsCache,
 };
